@@ -1,0 +1,17 @@
+--- #YAML:1.0
+name:                PDF-TextBlock
+version:             0.01
+abstract:            Easier creation of text blocks when using PDF::API2
+license:             ~
+author:              
+    - Jay Hannah <jay@jays.net>
+generated_by:        ExtUtils::MakeMaker version 6.44
+distribution_type:   module
+requires:     
+    Class::Accessor::Fast:         0
+    File::Temp:                    0
+    PDF::API2:                     0
+    Test::More:                    0
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3
