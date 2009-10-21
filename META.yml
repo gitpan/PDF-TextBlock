@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               PDF-TextBlock
-version:            0.03
+version:            0.04
 abstract:           Easier creation of text blocks when using PDF::API2
 author:
     - Jay Hannah <jay@jays.net>
