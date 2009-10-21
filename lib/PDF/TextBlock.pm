@@ -22,7 +22,7 @@ PDF::TextBlock - Easier creation of text blocks when using PDF::API2
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 SYNOPSIS
 
@@ -68,11 +68,25 @@ which makes the word(s) you wrap in <href> clickable, and we underline those wor
 Note this markup syntax is very rudimentary. We do not support HTML.
 Tags cannot overlap each other. There is no way to escape tags inside text().
 
+The tests in t/ generate .pdf files. You might find those examples helpful.
+Watch out for 20-demo.pdf. It spits.  :)
+
 =head1 METHODS
 
 =head2 new
 
+Our attributes are listed below. They can be set when you call new(), 
+and/or added/changed individually at any time before you call apply(). 
+
 =over
+
+=item pdf
+
+A L<PDF::API2> object. You must provide this. 
+
+=item text
+
+The text of your TextBlock. Defaults to garbledy_gook().
 
 =item x
 
@@ -89,14 +103,6 @@ Width of this text block. Default is 175/mm.
 =item h
 
 Height of this text block. Default is 220/mm.
-
-=item lead
-
-From Rick's tutorial. I don't know what this does.  :)  Default is 15/pt.
-
-=item parspace
-
-From Rick's tutorial. I don't know what this does.  :)  Default is 0/pt.
 
 =item align
 
@@ -125,12 +131,103 @@ Aligns each line to the right.
 
 =back
 
+=item page
+
+A L<PDF::API2::Page> object. If you don't set this manually then we create 
+a new page for you when you call apply(). 
+
+If you want multiple PDF::TextBlock objects to all render onto the same 
+page, you could create a PDF::API2 page yourself, and pass it in to each
+PDF::TextBlock object:
+
+  my $pdf = PDF::API2->new( -file => "mytest.pdf" );
+  my $page = $pdf->page();
+
+  my $tb  = PDF::TextBlock->new({
+     pdf  => $pdf,
+     page => $page,     # <---
+     ...
+
+Or after your first apply() you could grab $page off of $tb.
+
+  my $pdf = PDF::API2->new( -file => "mytest.pdf" );
+  my $tb  = PDF::TextBlock->new({
+     pdf  => $pdf,
+     ...
+  });
+  $tb->apply;
+  my $page = $tb->page;   # Use the same page
+
+  my $tb2 = PDF::TextBlock->new({
+     pdf  => $pdf,
+     page => $page,     # <---
+     ...
+
+=item fonts
+
+A hashref of HTML-like markup tags and what font objects you want us to use 
+when we see that tag in text(). 
+
+  my $tb  = PDF::TextBlock->new({
+     pdf       => $pdf,
+     fonts     => {
+        # font is a PDF::API2::Resource::Font::CoreFont
+        b => PDF::TextBlock::Font->new({
+           pdf  => $pdf,
+           font => $pdf->corefont( 'Helvetica-Bold', -encoding => 'latin1' ),
+           fillcolor => '#ff0000',  # red
+        }),
+     },
+  });
+
+=back
+
+The attributes below came from Rick's text_block(). They do things, 
+but I don't really understand them. POD patches welcome.  :) 
+
+L<http://rick.measham.id.au/pdf-api2/>
+
+=over
+
+=item lead
+
+Default is 15/pt.
+
+=item parspace
+
+Default is 0/pt.
+
+=item hang
+
+=item flindent
+
+=item fpindent
+
+=item indent
+
 =back
 
 =head2 apply
 
+This is where we do all the L<PDF::API2> heavy lifting for you.
+
+Returns $endw, $ypos, $overflow. 
+
+I'm not sure what $endw is good for, it's straight from Ricks' code.  :)
+
+$ypos is useful when you have multiple TextBlock objects and you want to start
+the next one wherever the previous one left off.
+
+  my ($endw, $ypos) = $tb->apply();
+  $tb->y($ypos);
+  $tb->text("a bunch more text");
+  $tb->apply();
+
+$overflow is whatever text() didn't fit inside your TextBlock. 
+(Too much text? Your font was too big? You set w and h too small?)
+
 The original version of this method was text_block(), which is © Rick Measham, 2004-2007. 
-The latest version of text_block() can be found in the tutorial located at L<http://rick.measham.id.au/pdf-api2/>
+The latest version of text_block() can be found in the tutorial located at L<http://rick.measham.id.au/pdf-api2/>.
 text_block() is released under the LGPL v2.1.
 
 =cut
@@ -151,7 +248,7 @@ sub apply {
    # Build %content_texts. A hash of all PDF::API2::Content::Text objects,
    # one for each tag (<b> or <i> or whatever) in $text.
    my %content_texts;
-   foreach my $tag (($text =~ /<([^\/].*?)>/g), "default") {
+   foreach my $tag (($text =~ /<(\w*)[^\/].*?>/g), "default") {       
       next if ($content_texts{$tag});
       my $content_text = $page->text;      # PDF::API2::Content::Text obj
       my $font;
@@ -307,6 +404,7 @@ sub apply {
                if ($tag =~ /^href/) {
                   ($href) = ($tag =~ /href="(.*?)"/);
                   # warn "href is now $href";
+                  $current_content_text = $content_texts{href} if ref $content_texts{href};
                } elsif ($tag !~ /\//) {
                   $current_content_text = $content_texts{$tag};
                }
@@ -343,14 +441,16 @@ sub apply {
             }
 
             unless ($width{$word}) {
-               warn "Can't find \$width{$word}";
+               $debug && _debug("Can't find \$width{$word}");
+               $width{$word} = 0;
             }
             $xpos += ( $width{$word} + $wordspace ) if (@line);
 
             if ($word =~ /\//) {
                if ($word =~ /\/href/) {
                   undef $href;
-               } else {
+               }
+               unless ($href) {
                   $current_content_text = $content_texts{default};
                }
             }
@@ -374,7 +474,10 @@ sub apply {
 
    # Don't yet know why we'd want to return @paragraphs...
    # unshift( @paragraphs, join( ' ', @paragraph ) ) if scalar(@paragraph);
-   return ( $endw, $ypos );  # , join( "\n", @paragraphs ) )
+   #return ( $endw, $ypos );  # , join( "\n", @paragraphs ) )
+   unshift( @paragraphs, join( ' ', @paragraph ) ) if scalar(@paragraph);
+   my $overflow = join("\n",@paragraphs);
+   return ( $endw, $ypos, $overflow);    #$overflow text returned to script
 }
 
 
@@ -492,7 +595,7 @@ L<http://search.cpan.org/dist/PDF-TextBlock>
 
 =item * Version control
 
-L<http://github.com/jhannah/pdf-textblock/tree/master>
+L<http://github.com/jhannah/pdf-textblock>
 
 =back
 
