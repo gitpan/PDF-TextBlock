@@ -13,4 +13,5 @@ t/camel.jpg
 t/pod-coverage.t
 t/pod.t
 t/README
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
